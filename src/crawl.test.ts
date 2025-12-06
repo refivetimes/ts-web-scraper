@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { normalizeURL, getH1FromHTML, getFirstParagraphFromHTML, getURLsFromHTML, getImagesFromHTML } from './crawl';
+import { normalizeURL, getH1FromHTML, getFirstParagraphFromHTML, getURLsFromHTML, getImagesFromHTML, extractPageData } from './crawl';
 
 test('normalizeURL should remove trailing slash from URL', () => {
     const input = 'https://example.com/path/';
@@ -435,6 +435,282 @@ test('getImagesFromHTML should handle data URLs', () => {
   
     const actual = getImagesFromHTML(inputBody, inputURL);
     const expected = ["data:image/png;base64,iVBORw0KGgo="];
+  
+    expect(actual).toEqual(expected);
+});
+
+test('extractPageData should extract all page data from basic HTML', () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `
+      <html><body>
+        <h1>Test Title</h1>
+        <p>This is the first paragraph.</p>
+        <a href="/link1">Link 1</a>
+        <img src="/image1.jpg" alt="Image 1">
+      </body></html>
+    `;
+  
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://blog.boot.dev",
+      h1: "Test Title",
+      first_paragraph: "This is the first paragraph.",
+      outgoing_links: ["https://blog.boot.dev/link1"],
+      image_urls: ["https://blog.boot.dev/image1.jpg"],
+    };
+  
+    expect(actual).toEqual(expected);
+});
+
+test('extractPageData should handle missing h1', () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `
+      <html><body>
+        <p>This is the first paragraph.</p>
+        <a href="/link1">Link 1</a>
+        <img src="/image1.jpg" alt="Image 1">
+      </body></html>
+    `;
+  
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://blog.boot.dev",
+      h1: "",
+      first_paragraph: "This is the first paragraph.",
+      outgoing_links: ["https://blog.boot.dev/link1"],
+      image_urls: ["https://blog.boot.dev/image1.jpg"],
+    };
+  
+    expect(actual).toEqual(expected);
+});
+
+test('extractPageData should handle missing paragraph', () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `
+      <html><body>
+        <h1>Test Title</h1>
+        <a href="/link1">Link 1</a>
+        <img src="/image1.jpg" alt="Image 1">
+      </body></html>
+    `;
+  
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://blog.boot.dev",
+      h1: "Test Title",
+      first_paragraph: "",
+      outgoing_links: ["https://blog.boot.dev/link1"],
+      image_urls: ["https://blog.boot.dev/image1.jpg"],
+    };
+  
+    expect(actual).toEqual(expected);
+});
+
+test('extractPageData should return empty arrays when no links or images exist', () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `
+      <html><body>
+        <h1>Test Title</h1>
+        <p>This is the first paragraph.</p>
+      </body></html>
+    `;
+  
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://blog.boot.dev",
+      h1: "Test Title",
+      first_paragraph: "This is the first paragraph.",
+      outgoing_links: [],
+      image_urls: [],
+    };
+  
+    expect(actual).toEqual(expected);
+});
+
+test('extractPageData should extract multiple links and images', () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `
+      <html><body>
+        <h1>Test Title</h1>
+        <p>This is the first paragraph.</p>
+        <a href="/link1">Link 1</a>
+        <a href="https://external.com">External</a>
+        <a href="relative">Relative</a>
+        <img src="/image1.jpg" alt="Image 1">
+        <img src="https://cdn.example.com/image2.png" alt="Image 2">
+        <img src="images/local.gif" alt="Local">
+      </body></html>
+    `;
+  
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://blog.boot.dev",
+      h1: "Test Title",
+      first_paragraph: "This is the first paragraph.",
+      outgoing_links: ["https://blog.boot.dev/link1", "https://external.com/", "https://blog.boot.dev/relative"],
+      image_urls: ["https://blog.boot.dev/image1.jpg", "https://cdn.example.com/image2.png", "https://blog.boot.dev/images/local.gif"],
+    };
+  
+    expect(actual).toEqual(expected);
+});
+
+test('extractPageData should prefer paragraph in main over outside', () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `
+      <html><body>
+        <h1>Test Title</h1>
+        <p>Outside paragraph.</p>
+        <main>
+          <p>Main paragraph.</p>
+        </main>
+        <a href="/link1">Link 1</a>
+        <img src="/image1.jpg" alt="Image 1">
+      </body></html>
+    `;
+  
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://blog.boot.dev",
+      h1: "Test Title",
+      first_paragraph: "Main paragraph.",
+      outgoing_links: ["https://blog.boot.dev/link1"],
+      image_urls: ["https://blog.boot.dev/image1.jpg"],
+    };
+  
+    expect(actual).toEqual(expected);
+});
+
+test('extractPageData should handle empty HTML', () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `<html><body></body></html>`;
+  
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://blog.boot.dev",
+      h1: "",
+      first_paragraph: "",
+      outgoing_links: [],
+      image_urls: [],
+    };
+  
+    expect(actual).toEqual(expected);
+});
+
+test('extractPageData should handle links without href and images without src', () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `
+      <html><body>
+        <h1>Test Title</h1>
+        <p>This is the first paragraph.</p>
+        <a>Link without href</a>
+        <a href="/valid">Valid link</a>
+        <img alt="Image without src">
+        <img src="/valid.jpg" alt="Valid image">
+      </body></html>
+    `;
+  
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://blog.boot.dev",
+      h1: "Test Title",
+      first_paragraph: "This is the first paragraph.",
+      outgoing_links: ["https://blog.boot.dev/valid"],
+      image_urls: ["https://blog.boot.dev/valid.jpg"],
+    };
+  
+    expect(actual).toEqual(expected);
+});
+
+test('extractPageData should handle mixed absolute and relative URLs', () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `
+      <html><body>
+        <h1>Test Title</h1>
+        <p>This is the first paragraph.</p>
+        <a href="https://example.com">Absolute</a>
+        <a href="/relative">Relative</a>
+        <img src="https://cdn.example.com/image.jpg" alt="Absolute">
+        <img src="/relative.png" alt="Relative">
+      </body></html>
+    `;
+  
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://blog.boot.dev",
+      h1: "Test Title",
+      first_paragraph: "This is the first paragraph.",
+      outgoing_links: ["https://example.com/", "https://blog.boot.dev/relative"],
+      image_urls: ["https://cdn.example.com/image.jpg", "https://blog.boot.dev/relative.png"],
+    };
+  
+    expect(actual).toEqual(expected);
+});
+
+test('extractPageData should handle base URL with path', () => {
+    const inputURL = "https://blog.boot.dev/posts";
+    const inputBody = `
+      <html><body>
+        <h1>Post Title</h1>
+        <p>Post content.</p>
+        <a href="next">Next post</a>
+        <img src="thumbnail.jpg" alt="Thumbnail">
+      </body></html>
+    `;
+  
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://blog.boot.dev/posts",
+      h1: "Post Title",
+      first_paragraph: "Post content.",
+      outgoing_links: ["https://blog.boot.dev/next"],
+      image_urls: ["https://blog.boot.dev/thumbnail.jpg"],
+    };
+  
+    expect(actual).toEqual(expected);
+});
+
+test('extractPageData should handle h1 with nested elements', () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `
+      <html><body>
+        <h1>Test <span>Title</span> with <em>formatting</em></h1>
+        <p>This is the first paragraph.</p>
+        <a href="/link1">Link 1</a>
+        <img src="/image1.jpg" alt="Image 1">
+      </body></html>
+    `;
+  
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://blog.boot.dev",
+      h1: "Test Title with formatting",
+      first_paragraph: "This is the first paragraph.",
+      outgoing_links: ["https://blog.boot.dev/link1"],
+      image_urls: ["https://blog.boot.dev/image1.jpg"],
+    };
+  
+    expect(actual).toEqual(expected);
+});
+
+test('extractPageData should handle paragraph with nested elements', () => {
+    const inputURL = "https://blog.boot.dev";
+    const inputBody = `
+      <html><body>
+        <h1>Test Title</h1>
+        <p>This is <strong>the first</strong> paragraph with <em>formatting</em>.</p>
+        <a href="/link1">Link 1</a>
+        <img src="/image1.jpg" alt="Image 1">
+      </body></html>
+    `;
+  
+    const actual = extractPageData(inputBody, inputURL);
+    const expected = {
+      url: "https://blog.boot.dev",
+      h1: "Test Title",
+      first_paragraph: "This is the first paragraph with formatting.",
+      outgoing_links: ["https://blog.boot.dev/link1"],
+      image_urls: ["https://blog.boot.dev/image1.jpg"],
+    };
   
     expect(actual).toEqual(expected);
 });
