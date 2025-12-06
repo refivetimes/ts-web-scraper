@@ -1,5 +1,5 @@
-import { test, expect } from 'vitest';
-import { normalizeURL, getH1FromHTML, getFirstParagraphFromHTML, getURLsFromHTML, getImagesFromHTML, extractPageData } from './crawl';
+import { test, expect, vi, beforeEach, afterEach } from 'vitest';
+import { normalizeURL, getH1FromHTML, getFirstParagraphFromHTML, getURLsFromHTML, getImagesFromHTML, extractPageData, getHTML, crawlPage } from './crawl';
 
 test('normalizeURL should remove trailing slash from URL', () => {
     const input = 'https://example.com/path/';
@@ -713,4 +713,283 @@ test('extractPageData should handle paragraph with nested elements', () => {
     };
   
     expect(actual).toEqual(expected);
+});
+
+test('getHTML should fetch and return HTML for valid URL', async () => {
+    vi.restoreAllMocks();
+    
+    const mockHTML = '<html><body><h1>Test</h1></body></html>';
+    const mockResponse = {
+        status: 200,
+        headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+        text: vi.fn().mockResolvedValue(mockHTML),
+    };
+
+    global.fetch = vi.fn().mockResolvedValue(mockResponse as unknown as Response);
+
+    const result = await getHTML('https://example.com');
+
+    expect(result).toBe(mockHTML);
+    expect(global.fetch).toHaveBeenCalledWith('https://example.com', {
+        headers: { 'User-Agent': 'BootCrawler/1.0' },
+    });
+});
+
+test('getHTML should return null for HTTP 404 error', async () => {
+    vi.restoreAllMocks();
+    const mockResponse = {
+        status: 404,
+        statusText: 'Not Found',
+        headers: new Headers({ 'content-type': 'text/html' }),
+    };
+
+    global.fetch = vi.fn().mockResolvedValue(mockResponse as unknown as Response);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await getHTML('https://example.com/notfound');
+
+    expect(result).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Error fetching')
+    );
+
+    consoleSpy.mockRestore();
+});
+
+test('getHTML should return null for HTTP 500 error', async () => {
+    vi.restoreAllMocks();
+    const mockResponse = {
+        status: 500,
+        statusText: 'Internal Server Error',
+        headers: new Headers({ 'content-type': 'text/html' }),
+    };
+
+    global.fetch = vi.fn().mockResolvedValue(mockResponse as unknown as Response);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await getHTML('https://example.com/error');
+
+    expect(result).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Error fetching')
+    );
+
+    consoleSpy.mockRestore();
+});
+
+test('getHTML should return null for non-HTML content type', async () => {
+    vi.restoreAllMocks();
+    const mockResponse = {
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        text: vi.fn().mockResolvedValue('{"data": "test"}'),
+    };
+
+    global.fetch = vi.fn().mockResolvedValue(mockResponse as unknown as Response);
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await getHTML('https://example.com/api/data');
+
+    expect(result).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Error fetching')
+    );
+
+    consoleSpy.mockRestore();
+});
+
+test('getHTML should return null when content-type header is missing', async () => {
+    vi.restoreAllMocks();
+        const mockResponse = {
+            status: 200,
+            headers: new Headers(),
+            text: vi.fn().mockResolvedValue('some content'),
+        };
+
+        global.fetch = vi.fn().mockResolvedValue(mockResponse as unknown as Response);
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const result = await getHTML('https://example.com/no-content-type');
+
+        expect(result).toBeNull();
+        expect(consoleSpy).toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
+});
+
+test('getHTML should handle network errors', async () => {
+    vi.restoreAllMocks();
+        global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const result = await getHTML('https://example.com');
+
+        expect(result).toBeNull();
+        expect(consoleSpy).toHaveBeenCalledWith(
+            expect.stringContaining('Error fetching'),
+            expect.any(String)
+        );
+
+    consoleSpy.mockRestore();
+});
+
+test('getHTML should set User-Agent header', async () => {
+    vi.restoreAllMocks();
+        const mockHTML = '<html><body>Test</body></html>';
+        const mockResponse = {
+            status: 200,
+            headers: new Headers({ 'content-type': 'text/html' }),
+            text: vi.fn().mockResolvedValue(mockHTML),
+        };
+
+        global.fetch = vi.fn().mockResolvedValue(mockResponse as unknown as Response);
+
+        await getHTML('https://example.com');
+
+    expect(global.fetch).toHaveBeenCalledWith('https://example.com', {
+        headers: { 'User-Agent': 'BootCrawler/1.0' },
+    });
+});
+
+test('crawlPage should crawl a single page', async () => {
+    vi.restoreAllMocks();
+        const mockHTML = `
+            <html>
+                <body>
+                    <h1>Page 1</h1>
+                    <a href="/page2">Link to Page 2</a>
+                </body>
+            </html>
+        `;
+
+        const mockResponse = {
+            status: 200,
+            headers: new Headers({ 'content-type': 'text/html' }),
+            text: vi.fn().mockResolvedValue(mockHTML),
+        };
+
+        global.fetch = vi.fn().mockResolvedValue(mockResponse as unknown as Response);
+
+        const result = await crawlPage('https://example.com', 'https://example.com');
+
+        expect(result).toHaveProperty('https://example.com');
+        expect(result['https://example.com']).toBe(1);
+    expect(global.fetch).toHaveBeenCalledWith('https://example.com', expect.any(Object));
+});
+
+test('crawlPage should not crawl pages from different domains', async () => {
+    vi.restoreAllMocks();
+    const mockFetch = vi.fn();
+    global.fetch = mockFetch;
+    
+    const result = await crawlPage('https://example.com', 'https://different-domain.com');
+
+    expect(result).toEqual({});
+    expect(mockFetch).not.toHaveBeenCalled();
+});
+
+test('crawlPage should increment count for duplicate URLs', async () => {
+    vi.restoreAllMocks();
+        const mockHTML1 = '<html><body><a href="/page2">Link</a></body></html>';
+        const mockHTML2 = '<html><body><a href="https://example.com">Back</a></body></html>';
+
+        let callCount = 0;
+        global.fetch = vi.fn().mockImplementation(() => {
+            callCount++;
+            const mockHTML = callCount === 1 ? mockHTML1 : mockHTML2;
+            return Promise.resolve({
+                status: 200,
+                headers: new Headers({ 'content-type': 'text/html' }),
+                text: vi.fn().mockResolvedValue(mockHTML),
+            } as unknown as Response);
+        });
+
+        const result = await crawlPage('https://example.com');
+
+    expect(result['https://example.com']).toBeGreaterThan(1);
+});
+
+test('crawlPage should crawl multiple linked pages', async () => {
+    vi.restoreAllMocks();
+        const mockHTML1 = '<html><body><a href="/page2">Link</a></body></html>';
+        const mockHTML2 = '<html><body><a href="/page3">Link</a></body></html>';
+        const mockHTML3 = '<html><body>Page 3</body></html>';
+
+        let callCount = 0;
+        global.fetch = vi.fn().mockImplementation((url: string) => {
+            callCount++;
+            let mockHTML: string;
+            if (url === 'https://example.com' || url === 'https://example.com/') {
+                mockHTML = mockHTML1;
+            } else if (url === 'https://example.com/page2') {
+                mockHTML = mockHTML2;
+            } else {
+                mockHTML = mockHTML3;
+            }
+            return Promise.resolve({
+                status: 200,
+                headers: new Headers({ 'content-type': 'text/html' }),
+                text: vi.fn().mockResolvedValue(mockHTML),
+            } as unknown as Response);
+        });
+
+        const result = await crawlPage('https://example.com');
+
+    expect(Object.keys(result).length).toBeGreaterThan(1);
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+});
+
+test('crawlPage should handle pages with no links', async () => {
+    vi.restoreAllMocks();
+        const mockHTML = '<html><body><h1>No links here</h1></body></html>';
+
+        global.fetch = vi.fn().mockResolvedValue({
+            status: 200,
+            headers: new Headers({ 'content-type': 'text/html' }),
+            text: vi.fn().mockResolvedValue(mockHTML),
+        } as unknown as Response);
+
+        const result = await crawlPage('https://example.com');
+
+        expect(result).toHaveProperty('https://example.com');
+        expect(result['https://example.com']).toBe(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+});
+
+test('crawlPage should skip pages that return null from getHTML', async () => {
+    vi.restoreAllMocks();
+        global.fetch = vi.fn().mockResolvedValue({
+            status: 404,
+            statusText: 'Not Found',
+            headers: new Headers({ 'content-type': 'text/html' }),
+        } as unknown as Response);
+
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        const result = await crawlPage('https://example.com');
+
+        expect(result).toHaveProperty('https://example.com');
+        expect(result['https://example.com']).toBe(1);
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    consoleSpy.mockRestore();
+});
+
+test('crawlPage should normalize URLs when tracking', async () => {
+    vi.restoreAllMocks();
+        const mockHTML = '<html><body><a href="/page">Link</a></body></html>';
+
+        global.fetch = vi.fn().mockResolvedValue({
+            status: 200,
+            headers: new Headers({ 'content-type': 'text/html' }),
+            text: vi.fn().mockResolvedValue(mockHTML),
+        } as unknown as Response);
+
+        const result = await crawlPage('https://example.com/');
+
+    // Both URLs should be normalized (no trailing slash)
+    const keys = Object.keys(result);
+    keys.forEach(key => {
+        expect(key).not.toMatch(/\/$/);
+    });
 });
