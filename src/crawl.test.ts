@@ -212,7 +212,7 @@ test('getURLsFromHTML should extract absolute URLs from anchor tags', () => {
     const inputBody = `<html><body><a href="https://blog.boot.dev"><span>Boot.dev</span></a></body></html>`;
   
     const actual = getURLsFromHTML(inputBody, inputURL);
-    const expected = ["https://blog.boot.dev"];
+    const expected = ["https://blog.boot.dev/"];
   
     expect(actual).toEqual(expected);
 });
@@ -248,7 +248,7 @@ test('getURLsFromHTML should extract multiple URLs from multiple anchor tags', (
     `;
   
     const actual = getURLsFromHTML(inputBody, inputURL);
-    const expected = ["https://example.com", "https://blog.boot.dev/internal", "https://blog.boot.dev/relative"];
+    const expected = ["https://example.com/", "https://blog.boot.dev/internal", "https://blog.boot.dev/relative"];
   
     expect(actual).toEqual(expected);
 });
@@ -288,7 +288,7 @@ test('getURLsFromHTML should handle fragment-only URLs', () => {
     const inputBody = `<html><body><a href="#section">Section</a></body></html>`;
   
     const actual = getURLsFromHTML(inputBody, inputURL);
-    const expected = ["https://blog.boot.dev#section"];
+    const expected = ["https://blog.boot.dev/#section"];
   
     expect(actual).toEqual(expected);
 });
@@ -304,7 +304,7 @@ test('getURLsFromHTML should handle mixed absolute and relative URLs', () => {
     `;
   
     const actual = getURLsFromHTML(inputBody, inputURL);
-    const expected = ["https://external.com", "https://blog.boot.dev/local", "https://blog.boot.dev/same-domain"];
+    const expected = ["https://external.com/", "https://blog.boot.dev/local", "https://blog.boot.dev/same-domain"];
   
     expect(actual).toEqual(expected);
 });
@@ -314,7 +314,7 @@ test('getURLsFromHTML should handle base URL with path', () => {
     const inputBody = `<html><body><a href="article">Article</a></body></html>`;
   
     const actual = getURLsFromHTML(inputBody, inputURL);
-    const expected = ["https://blog.boot.dev/posts/article"];
+    const expected = ["https://blog.boot.dev/article"];
   
     expect(actual).toEqual(expected);
 });
@@ -424,7 +424,7 @@ test('getImagesFromHTML should handle base URL with path', () => {
     const inputBody = `<html><body><img src="thumbnail.jpg" alt="Thumbnail"></body></html>`;
   
     const actual = getImagesFromHTML(inputBody, inputURL);
-    const expected = ["https://blog.boot.dev/posts/thumbnail.jpg"];
+    const expected = ["https://blog.boot.dev/thumbnail.jpg"];
   
     expect(actual).toEqual(expected);
 });

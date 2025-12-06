@@ -64,9 +64,65 @@ export function getFirstParagraphFromHTML(html: string): string {
 }
 
 export function getURLsFromHTML(html: string, baseURL: string): string[] {
-    return [""];
+    const dom = new JSDOM(html);
+    const document = dom.window.document;
+
+    const anchors = document.querySelectorAll('a');
+    const urls: string[] = [];
+    
+    for (let anchor of anchors) {
+        const href = anchor.getAttribute("href");
+ 
+        if (href === null) {
+            continue;
+        }
+        
+        try {
+            let absoluteURL: string;
+            
+            if (href === "") {
+                absoluteURL = baseURL;
+            } else {
+                const resolvedURL = new URL(href, baseURL);
+                absoluteURL = resolvedURL.toString();
+            }
+            urls.push(absoluteURL);
+        } catch (error) {
+            continue;
+        }
+    }
+    
+    return urls;
 }
 
 export function getImagesFromHTML(html: string, baseURL: string): string[] {
-    return [""];
+    const dom = new JSDOM(html);
+    const document = dom.window.document;
+
+    const imgs = document.querySelectorAll('img');
+    const urls: string[] = [];
+    
+    for (let img of imgs) {
+        const src = img.getAttribute("src");
+
+        if (src === null) {
+            continue;
+        }
+        
+        try {
+            let absoluteURL: string;
+            
+            if (src === "") {
+                absoluteURL = baseURL;
+            } else {
+                const resolvedURL = new URL(src, baseURL);
+                absoluteURL = resolvedURL.toString();
+            }
+            urls.push(absoluteURL);
+        } catch (error) {
+            continue;
+        }
+    }
+    
+    return urls;
 }
