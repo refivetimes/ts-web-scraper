@@ -1,4 +1,6 @@
 
+import { JSDOM } from 'jsdom';
+
 export function normalizeURL(url: string): string {
     const urlObj = new URL(url);
     
@@ -26,4 +28,45 @@ export function normalizeURL(url: string): string {
     }
     
     return urlObj.toString();
+}
+
+export function getH1FromHTML(html: string): string {
+    const dom = new JSDOM(html);
+    const document = dom.window.document;
+    
+    const h1Element = document.querySelector('h1');
+    
+    if (!h1Element) {
+        return "";
+    }
+    
+    return h1Element.textContent || "";
+}
+
+export function getFirstParagraphFromHTML(html: string): string {
+    const dom = new JSDOM(html);
+    const document = dom.window.document;
+
+    const main = document.querySelector('main');
+    let paragraph = null;
+
+    if (!main) {
+        paragraph = document.querySelector('p');
+    } else {
+        paragraph = main.querySelector('p');
+    }
+    
+    if (!paragraph) {
+        return "";
+    }
+    
+    return paragraph.textContent || "";
+}
+
+export function getURLsFromHTML(html: string, baseURL: string): string[] {
+    return [""];
+}
+
+export function getImagesFromHTML(html: string, baseURL: string): string[] {
+    return [""];
 }
