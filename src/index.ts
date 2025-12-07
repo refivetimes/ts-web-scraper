@@ -1,27 +1,40 @@
-import { argv, exit } from 'node:process';
-import { getHTML, crawlSiteAsync} from './crawl';
+import { crawlSiteAsync } from "./crawl";
+import { writeCSVReport } from "./report";
 
 async function main() {
-    // argv[0] is node executable, argv[1] is script path, argv[2+] are arguments
-    if (argv.length < 5) {
-        console.error("Error: Base URL argument required");
-        exit(1);
-    }
+  if (process.argv.length < 5) {
+    console.log("not enough arguments provided");
+    console.log(
+      "usage: node dist/index.js <baseURL> <maxConcurrency> <maxPages>",
+    );
+    process.exit(1);
+  }
+  if (process.argv.length > 5) {
+    console.log("too many arguments provided");
+    process.exit(1);
+  }
 
-    if (argv.length > 5) {
-        console.error("Error: Too many arguments");
-        exit(1);
-    }
+  const baseURL = process.argv[2];
+  const maxConcurrency = Number(process.argv[3]);
+  const maxPages = Number(process.argv[4]);
 
-    const BASE_URL = argv[2];
-    const maxConcurrency = Number(argv[3]);
-    const maxPages = Number(argv[4]);
+  if (!Number.isFinite(maxConcurrency) || maxConcurrency <= 0) {
+    console.log("invalid maxConcurrency");
+    process.exit(1);
+  }
+  if (!Number.isFinite(maxPages) || maxPages <= 0) {
+    console.log("invalid maxPages");
+    process.exit(1);
+  }
 
-    console.log(`Crawler starting at ${BASE_URL}`);
-    const pages = await crawlSiteAsync(BASE_URL, maxConcurrency, maxPages);
-    console.log(pages);
-    
-    exit(0);
+  console.log(
+    `starting crawl of: ${baseURL} (concurrency=${maxConcurrency}, maxPages=${maxPages})...`,
+  );
+
+  const pages = await crawlSiteAsync(baseURL, maxConcurrency, maxPages);
+  writeCSVReport(pages);
+
+  process.exit(0);
 }
 
 main();
